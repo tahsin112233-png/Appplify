@@ -1,26 +1,14 @@
 {
   "name": "Applify",
   "short_name": "Applify",
-  "description": "Beautiful YouTube Music Player with iOS Liquid Glass design",
+  "description": "Beautiful YouTube Music Player",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
-  "orientation": "portrait",
-  "categories": ["music", "entertainment"],
+  "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='115' fill='%23000'/><circle cx='256' cy='256' r='160' fill='none' stroke='%23007AFF' stroke-width='20'/><circle cx='256' cy='256' r='60' fill='%23007AFF'/><path d='M256 96 L276 236 L256 256 L236 236 Z' fill='white' opacity='0.9'/></svg>",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "Search Music",
-      "url": "/?view=search",
-      "description": "Search for music"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
