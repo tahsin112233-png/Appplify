@@ -393,12 +393,10 @@ body{font-family:var(--font);background:#000;color:var(--t1);height:100%;overflo
 'use strict';
 
 // ═══════════════════════════════════════════════
-// CONFIG — replace API_BASE with your worker URL after deploying
+// CONFIG — API runs on same domain via Vercel serverless
 // ═══════════════════════════════════════════════
-const API_BASE = 'https://api.ytify.workers.dev'; // ← will be replaced by user's own worker
-const USE_PIPED = true; // fallback to Piped API if worker fails
 
-// Piped instances (CORS-enabled, no auth needed)
+// Piped instances (fallback)
 const PIPED_APIS = [
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.adminforge.de',
@@ -512,9 +510,9 @@ window.selectRegion=function(code){closeRegionSheet();applyRegion(code)};
 // Init region display
 (()=>{const r=REGIONS.find(r=>r.code===S.region)||REGIONS[0];D.regionFlag.textContent=r.flag;D.regionName.textContent=r.name;})();
 
-// ═══ API ═══
+// ═══ API — same domain ═══
 async function apiFetch(path, params={}, timeout=10000){
-  const u=new URL(path, API_BASE.endsWith('/')?API_BASE:API_BASE+'/');
+  const u=new URL('/api/'+path, location.origin);
   Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v));
   const res=await fetch(u.toString(),{signal:AbortSignal.timeout(timeout)});
   if(!res.ok) throw new Error(`API ${res.status}`);
@@ -560,11 +558,10 @@ async function pipedTrending(region='BD'){
   return [];
 }
 
-// Try ytify worker first, fallback to Piped
+// Try API first, fallback to Piped
 async function doSearch(q, filter){
   try{
-    const f=filter==='all'?'relevance':filter;
-    const results=await apiFetch('search',{q,f});
+    const results=await apiFetch('search',{q});
     if(Array.isArray(results)&&results.length) return results;
   }catch{}
   // Piped fallback
@@ -597,7 +594,7 @@ async function getStreamURL(id){
   // put last known good first
   if(S.invIdx>0){const good=instances.splice(S.invIdx%instances.length,1);instances.unshift(good[0]);}
 
-  for(let i=0;i<instances.length;i++){
+  for(let i=0;i<<instances.length;i++){
     try{
       const res=await fetch(`${instances[i]}/api/v1/videos/${id}`,{signal:AbortSignal.timeout(9000)});
       if(!res.ok) throw new Error('HTTP '+res.status);
@@ -724,7 +721,7 @@ window.closePlayer=function(){S.playerOpen=false;D.player.classList.remove('open
 // Swipe to close
 let ty0=0,tt0=0;
 D.player.addEventListener('touchstart',e=>{ty0=e.touches[0].clientY;tt0=Date.now()},{passive:true});
-D.player.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-ty0>90&&Date.now()-tt0<350)closePlayer()},{passive:true});
+D.player.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-ty0>90&&Date.now()-tt0<<350)closePlayer()},{passive:true});
 
 // ═══ TABS ═══
 window.switchTab=function(tab){
@@ -876,7 +873,7 @@ function showEmptyState(){D.results.innerHTML='<div class="empty"><div class="ei
 // ═══ HOME ═══
 function updateGreeting(){
   const h=new Date().getHours();
-  const s=h<5?'🌙 Late night':h<12?'Good morning':h<17?'Good afternoon':h<21?'Good evening':'🌙 Good night';
+  const s=h<<5?'🌙 Late night':h<<12?'Good morning':h<<17?'Good afternoon':h<<21?'Good evening':'🌙 Good night';
   $('greet-sub').textContent=s;
 }
 
@@ -912,18 +909,19 @@ async function loadHomeContent(){
   $('feat-row').innerHTML='<div class="skel sk-fc"></div><div class="skel sk-fc"></div><div class="skel sk-fc"></div>';
   $('hot-row').innerHTML='<div class="skel sk-gc"></div><div class="skel sk-gc"></div><div class="skel sk-gc"></div><div class="skel sk-gc"></div>';
 
-  // Trending
-  pipedTrending(region).then(items=>{
-    if(!items.length){
-      // fallback: search
-      doSearch(`trending music ${REGIONS.find(r=>r.code===region)?.name||region} 2025`,'relevance').then(r=>{
-        if(r.length) renderFeatured(r.slice(0,6));
-      });
+  // Trending — API first, Piped fallback
+  (async()=>{
+    let items=[];
+    try{ items=await apiFetch('trending',{region}); }catch{}
+    if(!items||!items.length) items=await pipedTrending(region);
+    if(!items||!items.length){
+      const r=await doSearch(`trending music ${REGIONS.find(r=>r.code===region)?.name||region} 2025`,'relevance');
+      if(r.length) renderFeatured(r.slice(0,6));
       return;
     }
     renderFeatured(items.slice(0,8));
     renderHot(items.slice(8,16));
-  });
+  })();
 }
 
 function renderFeatured(items){
