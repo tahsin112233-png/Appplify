@@ -9,8 +9,8 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // Pass through all API/media requests
-  if (url.hostname !== location.hostname) return;
+  // Pass through API and external requests
+  if (url.pathname.startsWith('/api/') || url.hostname !== location.hostname) return;
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
       if (res.ok && e.request.method === 'GET') {
