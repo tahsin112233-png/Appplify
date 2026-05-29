@@ -327,75 +327,68 @@ body{font-family:var(--font);background:#000;color:var(--t1);height:100%;overflo
 </div>
 
 <script>
+<script>
 'use strict';
 
-// ═══ API — all calls go to our own Vercel serverless functions ═══
-const API = {
-  search:      q => `/api/search?q=${encodeURIComponent(q.q)}&f=${q.f||'all'}`,
-  stream:      id => `/api/stream?id=${encodeURIComponent(id)}`,
-  trending:    r  => `/api/trending?region=${encodeURIComponent(r)}`,
-  suggestions: q  => `/api/suggestions?q=${encodeURIComponent(q)}`,
-};
-
+// ═══ REGIONS & MOODS ═══
 const REGIONS=[
-  {c:'BD',n:'Bangladesh',f:'🇧🇩'},{c:'IN',n:'India',f:'🇮🇳'},
-  {c:'US',n:'United States',f:'🇺🇸'},{c:'GB',n:'UK',f:'🇬🇧'},
-  {c:'PK',n:'Pakistan',f:'🇵🇰'},{c:'ID',n:'Indonesia',f:'🇮🇩'},
-  {c:'TR',n:'Turkey',f:'🇹🇷'},{c:'EG',n:'Egypt',f:'🇪🇬'},
-  {c:'SA',n:'Saudi Arabia',f:'🇸🇦'},{c:'NG',n:'Nigeria',f:'🇳🇬'},
-  {c:'BR',n:'Brazil',f:'🇧🇷'},{c:'MX',n:'Mexico',f:'🇲🇽'},
-  {c:'DE',n:'Germany',f:'🇩🇪'},{c:'FR',n:'France',f:'🇫🇷'},
-  {c:'KR',n:'South Korea',f:'🇰🇷'},{c:'JP',n:'Japan',f:'🇯🇵'},
-  {c:'PH',n:'Philippines',f:'🇵🇭'},{c:'VN',n:'Vietnam',f:'🇻🇳'},
-  {c:'RU',n:'Russia',f:'🇷🇺'},{c:'TH',n:'Thailand',f:'🇹🇭'},
+  {code:'BD',name:'Bangladesh',flag:'🇧🇩'},{code:'IN',name:'India',flag:'🇮🇳'},
+  {code:'US',name:'United States',flag:'🇺🇸'},{code:'GB',name:'UK',flag:'🇬🇧'},
+  {code:'PK',name:'Pakistan',flag:'🇵🇰'},{code:'ID',name:'Indonesia',flag:'🇮🇩'},
+  {code:'TR',name:'Turkey',flag:'🇹🇷'},{code:'EG',name:'Egypt',flag:'🇪🇬'},
+  {code:'SA',name:'Saudi Arabia',flag:'🇸🇦'},{code:'NG',name:'Nigeria',flag:'🇳🇬'},
+  {code:'BR',name:'Brazil',flag:'🇧🇷'},{code:'MX',name:'Mexico',flag:'🇲🇽'},
+  {code:'DE',name:'Germany',flag:'🇩🇪'},{code:'FR',name:'France',flag:'🇫🇷'},
+  {code:'KR',name:'South Korea',flag:'🇰🇷'},{code:'JP',name:'Japan',flag:'🇯🇵'},
+  {code:'PH',name:'Philippines',flag:'🇵🇭'},{code:'VN',name:'Vietnam',flag:'🇻🇳'},
+  {code:'TH',name:'Thailand',flag:'🇹🇭'},{code:'RU',name:'Russia',flag:'🇷🇺'},
 ];
 const MOODS=[
-  {l:'Chill',e:'🌙',c:'#0a0a2a',q:'chill lofi music'},
-  {l:'Workout',e:'💪',c:'#280808',q:'workout pump up music 2025'},
-  {l:'Party',e:'🎉',c:'#180828',q:'party hits dance 2025'},
-  {l:'Focus',e:'🎯',c:'#082818',q:'focus study concentration music'},
-  {l:'Sad',e:'🌧️',c:'#0a1628',q:'sad emotional ballads'},
-  {l:'Happy',e:'☀️',c:'#282408',q:'happy upbeat feel good songs 2025'},
-  {l:'Desi',e:'🎸',c:'#1e0808',q:'bangla hindi desi hits 2025'},
-  {l:'Sleep',e:'😴',c:'#080e28',q:'sleep relaxing ambient music'},
+  {label:'Chill',e:'🌙',c:'#0d0d2e',q:'chill lofi music'},
+  {label:'Workout',e:'💪',c:'#2a0808',q:'workout pump up music 2025'},
+  {label:'Party',e:'🎉',c:'#1a082e',q:'party hits dance 2025'},
+  {label:'Focus',e:'🎯',c:'#082a1a',q:'focus study music'},
+  {label:'Sad',e:'🌧️',c:'#0d1a2e',q:'sad emotional songs'},
+  {label:'Happy',e:'☀️',c:'#2a250a',q:'happy feel good songs 2025'},
+  {label:'Sleep',e:'😴',c:'#08102a',q:'sleep relaxing music'},
+  {label:'Desi',e:'🎸',c:'#1e0808',q:'desi bangla hindi hits 2025'},
 ];
 
 // ═══ STATE ═══
 const S={
   id:null,track:null,playing:false,loop:false,shuffle:false,
-  speeds:[.5,.75,1,1.25,1.5,1.75,2],si:2,
+  speeds:[.5,.75,1,1.25,1.5,1.75,2],spdIdx:2,
   queue:[],history:[],
   liked:new Set(JSON.parse(localStorage.getItem('ap_liked')||'[]')),
   region:localStorage.getItem('ap_region')||'BD',
-  filter:'all',results:[],playerOpen:false,
+  filter:'all',results:[],
+  playerOpen:false,
   vol:parseFloat(localStorage.getItem('ap_vol')||'1'),
 };
 
-// Native <audio> element — the KEY to background play on iOS
+// ═══ AUDIO ═══
 const audio=new Audio();
-audio.crossOrigin='anonymous';
 audio.volume=S.vol;
-audio.preload='auto';
 
 // ═══ DOM ═══
 const $=id=>document.getElementById(id), $$=s=>document.querySelectorAll(s);
 const D={
-  sinp:$('sinp'),sclr:$('sclr'),suggWrap:$('sugg-wrap'),results:$('results'),
-  mini:$('mini'),mArt:$('m-art'),mTtl:$('m-ttl'),mAth:$('m-ath'),
-  mIco:$('m-ico'),mFill:$('m-fill'),
+  sinput:$('sinput'),sclr:$('sclr'),suggs:$('sugg-box'),results:$('results'),
+  mini:$('mini'),miniArt:$('m-art'),miniTtl:$('m-ttl'),miniAth:$('m-ath'),
+  miniIcon:$('m-ico'),miniFill:$('m-fill'),
   player:$('player'),pbgi:$('p-bgi'),art:$('art'),
   pttl:$('p-ttl'),path:$('p-ath'),pbar:$('pbar'),
-  tc:$('tc'),tt:$('tt'),ppico:$('pp-ico'),lkico:$('lk-ico'),
-  lk:$('lk'),toast:$('toast'),vsl:$('vsl'),spd:$('spd'),
-  rgnF:$('rgn-f'),rgnN:$('rgn-n'),
+  tc:$('tc'),tt:$('tt'),ppico:$('pp-ico'),likeico:$('lk-ico'),
+  likebtn:$('lk-btn'),toast:$('toast'),vsl:$('vsl'),spd:$('spd'),
+  rgnFlag:$('rgn-flag'),rgnName:$('rgn-name'),
 };
 
 // ═══ UTILS ═══
 const fmt=s=>{if(!s||isNaN(s))return'0:00';s=Math.floor(s);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=String(s%60).padStart(2,'0'),mm=h?String(m).padStart(2,'0'):m;return h?`${h}:${mm}:${ss}`:`${mm}:${ss}`};
-const thumb=(id,q='hqdefault')=>`https://i.ytimg.com/vi/${id}/${q}.jpg`;
+const thumb=(id,q='mqdefault')=>`https://i.ytimg.com/vi/${id}/${q}.jpg`;
 const ytId=u=>{if(!u)return null;const m=u.match(/(?:youtube\.com.*[?&]v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null};
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const shuf=a=>{const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b};
+const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a};
 
 let toastT;
 const toast=(m,d=2600)=>{D.toast.textContent=m;D.toast.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>D.toast.classList.remove('show'),d)};
@@ -403,89 +396,100 @@ const toast=(m,d=2600)=>{D.toast.textContent=m;D.toast.classList.add('show');cle
 // ═══ REGION ═══
 const applyRgn=code=>{
   S.region=code;localStorage.setItem('ap_region',code);
-  const r=REGIONS.find(x=>x.c===code)||REGIONS[0];
-  D.rgnF.textContent=r.f;D.rgnN.textContent=r.n;
+  const r=REGIONS.find(x=>x.code===code)||REGIONS[0];
+  D.rgnFlag.textContent=r.flag;D.rgnName.textContent=r.name;
   loadHome();
 };
 window.openRgn=()=>{
-  $('rg-lst').innerHTML=REGIONS.map(r=>`<div class="ro${r.c===S.region?' sel':''}" onclick="selRgn('${r.c}')"><span class="ro-fl">${r.f}</span>${r.n}</div>`).join('');
-  $('rg').classList.add('show');
+  $('rg-lst').innerHTML=REGIONS.map(r=>`<div class="ro${r.code===S.region?' sel':''}" onclick="selRgn('${r.code}')"><span class="ro-flag">${r.flag}</span>${r.name}</div>`).join('');
+  $('rg-sheet').classList.add('show');
 };
-window.closeRgn=()=>$('rg').classList.remove('show');
-window.selRgn=c=>{closeRgn();applyRgn(c)};
-(()=>{const r=REGIONS.find(x=>x.c===S.region)||REGIONS[0];D.rgnF.textContent=r.f;D.rgnN.textContent=r.n;})();
+window.closeRgn=()=>$('rg-sheet').classList.remove('show');
+window.selRgn=code=>{closeRgn();applyRgn(code)};
+(()=>{const r=REGIONS.find(x=>x.code===S.region)||REGIONS[0];D.rgnFlag.textContent=r.flag;D.rgnName.textContent=r.name;})();
 
-// ═══ PLAY — the core: fetch stream URL server-side, play via native <audio> ═══
-async function playTrack(id, info={}) {
-  if(!id) return;
+// ═══ OWN API — all calls go through Vercel serverless functions ═══
+async function api(path, params={}, ms=12000){
+  const u=new URL('/api/'+path, location.origin);
+  Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));
+  const r=await fetch(u.toString(),{signal:AbortSignal.timeout(ms)});
+  if(!r.ok) throw new Error(`API ${r.status}`);
+  const d=await r.json();
+  if(d?.error) throw new Error(d.error);
+  return d;
+}
+
+// ═══ STREAM — server resolves audio URL, no CORS ═══
+async function getStream(id){
+  // /api/stream uses youtubei.js server-side → returns direct audio URL
+  const data=await api('stream',{id},15000);
+  if(!data.audioUrl) throw new Error('No audio URL returned');
+  return data;
+}
+
+// ═══ PLAY ═══
+async function playTrack(id, info={}){
+  if(!id)return;
   if(S.id&&S.track) S.history.unshift({id:S.id,...S.track});
   if(S.history.length>60) S.history.pop();
   S.id=id; S.playing=false;
 
-  const t=info.title||'Loading…', a=info.author||'';
-  setMini({t,a,id}); setPlayerInfo({t,a}); setArt(id);
+  const title=info.title||'Loading…', author=info.author||'';
+  setMini({title,author,id});
+  setUI({title,author});
+  setArt(id);
   if(!S.playerOpen) openPlayer();
   toast('⏳ Loading…');
   D.art.className='loading';
 
-  try {
-    // Fetch stream URL from our serverless function — no CORS, runs server-side
-    const res = await fetch(API.stream(id), { signal: AbortSignal.timeout(15000) });
-    if(!res.ok) throw new Error(`Stream API ${res.status}`);
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-    if(!data.audioUrl) throw new Error('No audio URL returned');
-
-    const title = data.title || t;
-    const author = (data.author || a).replace(' - Topic','');
-    const dur = data.duration || 0;
-
-    S.track = { title, author, duration: dur, id };
-    setMini({t:title, a:author, id});
-    setPlayerInfo({t:title, a:author, dur});
+  try{
+    const data=await getStream(id);
+    const t=data.title||title;
+    const a=(data.author||author||'').replace(' - Topic','');
+    const dur=data.duration||0;
+    S.track={title:t,author:a,duration:dur,id};
+    setMini({title:t,author:a,id});
+    setUI({title:t,author:a,dur});
     setArt(id);
-    setMS(title, author, id, dur);
-    document.title = `${title} — Applify`;
-    savePH(id, title, author);
-
-    // Play via native <audio> — this is what enables iOS background play
-    audio.src = data.audioUrl;
-    audio.playbackRate = S.speeds[S.si];
+    setMS(t,a,id,dur);
+    document.title=`${t} — Applify`;
+    savePH(id,t,a);
+    audio.src=data.audioUrl;
+    audio.playbackRate=S.speeds[S.spdIdx];
     audio.load();
     await audio.play().catch(()=>{});
-
-  } catch(e) {
-    toast('⚠ '+e.message, 4000);
-    D.art.className=''; updateIcons();
+  }catch(e){
+    toast('⚠ '+e.message,4000);
+    D.art.className='';
+    updateIcons();
   }
 }
 
 function setArt(id){
-  const u=thumb(id);
-  D.art.src=u; D.mArt.src=u; D.pbgi.style.backgroundImage=`url(${u})`;
+  const u=thumb(id,'hqdefault');
+  D.art.src=u; D.miniArt.src=u;
+  D.pbgi.style.backgroundImage=`url(${u})`;
   const o=document.querySelector('.o1');
-  o.style.background=`url(${thumb(id,'mqdefault')}) center/cover`;
-  o.style.filter='blur(90px) saturate(4) brightness(.45)';
-  o.style.opacity='.7';
+  if(o){o.style.background=`url(${thumb(id,'mqdefault')}) center/cover`;o.style.filter='blur(90px) saturate(4) brightness(.45)';}
 }
-function setMini({t,a}){D.mTtl.textContent=t;D.mAth.textContent=a||'—';D.mini.classList.add('show')}
-function setPlayerInfo({t,a,dur}){
-  D.pttl.textContent=t||'—';D.path.textContent=a||'—';
+function setMini({title,author}){D.miniTtl.textContent=title;D.miniAth.textContent=author||'—';D.mini.classList.add('show');}
+function setUI({title,author,dur}){
+  D.pttl.textContent=title||'—';D.path.textContent=author||'—';
   if(dur){D.pbar.max=dur;D.tt.textContent=fmt(dur);}
   const lk=S.liked.has(S.id);
-  D.lk.classList.toggle('on',lk);D.lkico.setAttribute('fill',lk?'currentColor':'none');
+  D.likebtn.classList.toggle('on',lk);
+  D.likeico.setAttribute('fill',lk?'currentColor':'none');
 }
-const playPath='<path d="M8 5v14l11-7z"/>';
-const pausePath='<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+const pPath='<path d="M8 5v14l11-7z"/>', pausePath='<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
 function updateIcons(){
-  D.ppico.innerHTML=S.playing?pausePath:playPath;
-  D.mIco.innerHTML=S.playing?pausePath:playPath;
+  D.ppico.innerHTML=S.playing?pausePath:pPath;
+  D.miniIcon.innerHTML=S.playing?pausePath:pPath;
   D.art.className=S.id?(S.playing?'playing':'paused'):'';
 }
 
 // ═══ CONTROLS ═══
 window.togglePlay=()=>{if(!S.id)return;S.playing?audio.pause():audio.play().catch(()=>{})};
-window.seekBy=d=>{audio.currentTime=Math.max(0,Math.min(audio.currentTime+d,audio.duration||0))};
+window.seek=d=>{audio.currentTime=Math.max(0,Math.min(audio.currentTime+d,audio.duration||0))};
 window.skipNext=()=>{if(!S.queue.length)return;const n=S.queue.shift();renderQ();playTrack(n.id,n)};
 window.skipPrev=()=>{
   if(audio.currentTime>3){audio.currentTime=0;return;}
@@ -494,20 +498,19 @@ window.skipPrev=()=>{
   if(S.id&&S.track)S.queue.unshift({id:S.id,...S.track});
   playTrack(p.id,p);renderQ();
 };
-window.toggleLoop=()=>{S.loop=!S.loop;audio.loop=S.loop;$('loopbtn').classList.toggle('on',S.loop);toast(S.loop?'🔁 Loop on':'Loop off')};
-window.toggleShuffle=()=>{S.shuffle=!S.shuffle;$('shuf').classList.toggle('on',S.shuffle);if(S.shuffle&&S.queue.length>1)S.queue=shuf(S.queue);renderQ();toast(S.shuffle?'🔀 Shuffle on':'Shuffle off')};
+window.toggleLoop=()=>{S.loop=!S.loop;audio.loop=S.loop;$('loop').classList.toggle('on',S.loop);toast(S.loop?'🔁 Loop on':'Loop off')};
+window.toggleShuffle=()=>{S.shuffle=!S.shuffle;$('shuf').classList.toggle('on',S.shuffle);if(S.shuffle&&S.queue.length>1)shuf(S.queue);renderQ();toast(S.shuffle?'🔀 Shuffle on':'Shuffle off')};
 window.toggleLike=()=>{
   if(!S.id)return;
-  if(S.liked.has(S.id)){S.liked.delete(S.id);toast('Removed from likes');}
-  else{S.liked.add(S.id);toast('❤ Added to likes');}
+  S.liked.has(S.id)?(S.liked.delete(S.id),toast('Removed from likes')):(S.liked.add(S.id),toast('❤ Added to likes'));
   localStorage.setItem('ap_liked',JSON.stringify([...S.liked]));
-  const lk=S.liked.has(S.id);D.lk.classList.toggle('on',lk);D.lkico.setAttribute('fill',lk?'currentColor':'none');
+  const lk=S.liked.has(S.id);D.likebtn.classList.toggle('on',lk);D.likeico.setAttribute('fill',lk?'currentColor':'none');
 };
-window.cycleSpd=()=>{S.si=(S.si+1)%S.speeds.length;const s=S.speeds[S.si];audio.playbackRate=s;D.spd.textContent=s+'×';toast(s+'× speed')};
+window.cycleSpd=()=>{S.spdIdx=(S.spdIdx+1)%S.speeds.length;const s=S.speeds[S.spdIdx];audio.playbackRate=s;D.spd.textContent=s+'×';toast(s+'× speed')};
 
-// Player open/close
+// ═══ PLAYER ═══
 window.openPlayer=()=>{if(!S.id)return;S.playerOpen=true;D.player.style.display='flex';requestAnimationFrame(()=>D.player.classList.add('open'))};
-window.closePlayer=()=>{S.playerOpen=false;D.player.classList.remove('open');setTimeout(()=>{if(!S.playerOpen)D.player.style.display='none'},440)};
+window.closePlayer=()=>{S.playerOpen=false;D.player.classList.remove('open');setTimeout(()=>{if(!S.playerOpen)D.player.style.display='none'},460)};
 let ty=0,tt_=0;
 D.player.addEventListener('touchstart',e=>{ty=e.touches[0].clientY;tt_=Date.now()},{passive:true});
 D.player.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-ty>90&&Date.now()-tt_<380)closePlayer()},{passive:true});
@@ -518,22 +521,28 @@ window.tab=v=>{
   $$('.nb').forEach(x=>x.classList.remove('on'));
   $(`${v}-view`).classList.add('active');
   $(`nb-${v}`)?.classList.add('on');
-  if(v==='queue') renderQ();
+  if(v==='queue')renderQ();
   if(v==='home'){updateGreet();renderRecent();}
 };
 
+// Fix tabs being wired to both tab() and switchTab() in HTML — alias
+window.switchTab=window.tab;
+window.openRegionSheet=window.openRgn;
+window.closeRegionSheet=window.closeRgn;
+window.selectRegion=window.selRgn;
+
 // ═══ QUEUE ═══
 function renderQ(){
-  const el=$('q-lst');
-  if(!S.queue.length&&!S.id){el.innerHTML='<div class="empty"><div class="e-ico">🎶</div><div class="e-ttl">Queue is empty</div><div class="e-sub">Search and play music to fill it</div></div>';return;}
+  const el=$('queue-list')||$('q-lst');if(!el)return;
+  if(!S.queue.length&&!S.id){el.innerHTML='<div class="empty"><div class="ei">🎶</div><div class="et">Queue is empty</div><div class="es">Search and play to fill it</div></div>';return;}
   let h='';
   if(S.id&&S.track){
-    h+=`<div style="padding:8px 12px 4px;font-size:10px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.8px">Now Playing</div>
-    <div class="qi"><div class="qn np">▶</div><img class="ti-th" src="${thumb(S.id)}" style="width:44px;height:44px" alt=""><div class="ti-inf"><div class="ttl" style="color:var(--acc)">${esc(S.track.title)}</div><div class="met">${esc(S.track.author)}</div></div></div>`;
+    h+=`<div style="padding:8px 12px 4px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.8px">Now Playing</div>
+    <div class="qi"><div class="qn np">▶</div><img class="tthumb" src="${thumb(S.id)}" style="width:44px;height:44px" alt=""><div class="tinfo"><div class="ttl" style="color:var(--accent)">${esc(S.track.title)}</div><div class="meta">${esc(S.track.author)}</div></div></div>`;
   }
   if(S.queue.length){
     h+=`<div style="padding:12px 12px 4px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px">Up Next</div>`;
-    S.queue.forEach((t,i)=>{h+=`<div class="qi" onclick="playFromQ(${i})"><div class="qn">${i+1}</div><img class="ti-th" src="${thumb(t.id)}" style="width:44px;height:44px" alt=""><div class="ti-inf"><div class="ttl">${esc(t.title)}</div><div class="met">${esc(t.author)}</div></div></div>`;});
+    S.queue.forEach((t,i)=>{h+=`<div class="qi" onclick="playFromQ(${i})"><div class="qn">${i+1}</div><img class="tthumb" src="${thumb(t.id)}" style="width:44px;height:44px" alt=""><div class="tinfo"><div class="ttl">${esc(t.title)}</div><div class="meta">${esc(t.author)}</div></div></div>`;});
   }
   el.innerHTML=h;
 }
@@ -547,13 +556,13 @@ audio.addEventListener('timeupdate',()=>{
   if(document.activeElement===D.pbar)return;
   const ct=audio.currentTime,dur=audio.duration||0;
   D.pbar.value=ct;D.tc.textContent=fmt(ct);
-  D.mFill.style.width=(dur?(ct/dur)*100:0)+'%';
+  D.miniFill.style.width=(dur?(ct/dur)*100:0)+'%';
 });
 audio.addEventListener('loadedmetadata',()=>{if(audio.duration&&isFinite(audio.duration)){D.pbar.max=audio.duration;D.tt.textContent=fmt(audio.duration)}});
 audio.addEventListener('waiting',()=>toast('⏳ Buffering…',8000));
 audio.addEventListener('error',()=>{
   if(!S.id)return;
-  toast('⚠ Stream error — retrying…');
+  toast('⚠ Stream error, retrying…');
   setTimeout(()=>playTrack(S.id,S.track),1200);
 });
 D.pbar.addEventListener('input',()=>{audio.currentTime=parseFloat(D.pbar.value);D.tc.textContent=fmt(D.pbar.value)});
@@ -572,8 +581,8 @@ function setMS(title,author,id,dur){
   ms.setActionHandler('pause',()=>audio.pause());
   ms.setActionHandler('nexttrack',skipNext);
   ms.setActionHandler('previoustrack',skipPrev);
-  ms.setActionHandler('seekbackward',d=>seekBy(-(d.seekOffset||15)));
-  ms.setActionHandler('seekforward',d=>seekBy(d.seekOffset||15));
+  ms.setActionHandler('seekbackward',d=>seek(-(d.seekOffset||15)));
+  ms.setActionHandler('seekforward',d=>seek(d.seekOffset||15));
   try{ms.setActionHandler('seekto',d=>{if(d.seekTime!=null)audio.currentTime=d.seekTime})}catch{}
 }
 audio.addEventListener('timeupdate',()=>{
@@ -583,73 +592,64 @@ audio.addEventListener('timeupdate',()=>{
 },{passive:true});
 
 // ═══ SEARCH ═══
-let sAC, sugT;
-D.sinp.addEventListener('input',()=>{
-  const q=D.sinp.value.trim();
+let sAC,sugT;
+D.sinput.addEventListener('input',()=>{
+  const q=D.sinput.value.trim();
   D.sclr.classList.toggle('show',q.length>0);
-  if(ytId(q)){hideSugg();toast('YouTube URL — press Enter to play');return;}
+  if(ytId(q)){hideSugg();toast('YouTube URL detected — tap Enter to play');return;}
   clearTimeout(sugT);
-  if(q.length>1) sugT=setTimeout(()=>loadSugg(q),320); else hideSugg();
+  if(q.length>1)sugT=setTimeout(()=>loadSugg(q),320);else hideSugg();
 });
-D.sinp.addEventListener('keydown',e=>{
+D.sinput.addEventListener('keydown',e=>{
   if(e.key!=='Enter')return;e.preventDefault();
-  const q=D.sinp.value.trim(),id=ytId(q);
-  if(id){playTrack(id,{title:'YouTube Video',author:''});D.sinp.blur();}
-  else if(q){runSearch(q,S.filter);hideSugg();D.sinp.blur();}
+  const q=D.sinput.value.trim(),id=ytId(q);
+  if(id){playTrack(id,{title:'YouTube Video',author:''});D.sinput.blur();}
+  else if(q){runSearch(q,S.filter);hideSugg();D.sinput.blur();}
 });
-D.sclr.addEventListener('click',()=>{
-  D.sinp.value='';D.sclr.classList.remove('show');hideSugg();
-  D.results.innerHTML='<div class="empty"><div class="e-ico">🎵</div><div class="e-ttl">Applify</div><div class="e-sub">Search or paste a YouTube URL</div></div>';
-  D.sinp.focus();
-});
+D.sclr.addEventListener('click',()=>{D.sinput.value='';D.sclr.classList.remove('show');hideSugg();D.results.innerHTML='<div class="empty"><div class="ei">🎵</div><div class="et">Applify</div><div class="es">Search or paste a YouTube URL</div></div>';D.sinput.focus()});
 $$('.chip').forEach(c=>c.addEventListener('click',()=>{
   $$('.chip').forEach(x=>x.classList.remove('on'));c.classList.add('on');
   S.filter=c.dataset.f;
-  const q=D.sinp.value.trim();if(q&&!ytId(q))runSearch(q,S.filter);
+  const q=D.sinput.value.trim();if(q&&!ytId(q))runSearch(q,S.filter);
 }));
 
 async function loadSugg(q){
   try{
-    const r=await fetch(API.suggestions(q),{signal:AbortSignal.timeout(4000)});
-    const items=await r.json();
+    const items=await api('search-suggestions',{q,music:'true'},5000);
     if(!Array.isArray(items)||!items.length){hideSugg();return;}
-    D.suggWrap.innerHTML=items.slice(0,6).map(s=>`<div class="sg" onclick="pickSugg('${esc(s)}')"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><span>${esc(s)}</span></div>`).join('');
-    D.suggWrap.classList.add('show');
+    D.suggs.innerHTML=items.slice(0,5).map(s=>`<div class="sg" onclick="pickSugg('${esc(s)}')"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><span>${esc(s)}</span></div>`).join('');
+    D.suggs.classList.add('show');
   }catch{hideSugg();}
 }
-function hideSugg(){D.suggWrap.classList.remove('show');D.suggWrap.innerHTML='';}
-window.pickSugg=t=>{D.sinp.value=t;D.sclr.classList.add('show');hideSugg();runSearch(t,S.filter);D.sinp.blur()};
+function hideSugg(){D.suggs.classList.remove('show');D.suggs.innerHTML='';}
+window.pickSugg=t=>{D.sinput.value=t;D.sclr.classList.add('show');hideSugg();runSearch(t,S.filter);D.sinput.blur()};
 
-async function runSearch(q,f){
+async function runSearch(q,filter){
   if(sAC)sAC.abort();sAC=new AbortController();
-  D.results.innerHTML='<div class="ld"><div class="sp"></div><div class="sp-t">Searching…</div></div>';
+  D.results.innerHTML='<div class="spin-wrap"><div class="spin"></div><div class="spin-txt">Searching…</div></div>';
   try{
-    const r=await fetch(API.search({q,f}),{signal:AbortSignal.timeout(15000)});
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const items=await r.json();
-    if(!items?.length){D.results.innerHTML='<div class="empty"><div class="e-ico">🔍</div><div class="e-ttl">No results</div><div class="e-sub">Try different keywords</div></div>';return;}
+    const items=await api('search',{q,filter},12000);
+    if(!items?.length){D.results.innerHTML='<div class="empty"><div class="ei">🔍</div><div class="et">No results</div><div class="es">Try a different search term</div></div>';return;}
     S.results=items;
     D.results.innerHTML=items.map((item,i)=>{
-      const id=item.id||item.videoId;if(!id)return'';
+      const id=item.id;if(!id)return'';
       const t=item.title||'Unknown',a=(item.author||'').replace(' - Topic','');
       return `<div class="ti fu ${id===S.id?'np':''}" style="animation-delay:${i*.04}s" onclick="playItem(${i})">
-        <img class="ti-th" src="${thumb(id)}" alt="" loading="lazy" onerror="this.style.opacity='.2'">
-        <div class="ti-inf"><div class="ttl">${esc(t)}</div><div class="met">${esc(a)}</div></div>
+        <img class="tthumb" src="${thumb(id)}" alt="" loading="lazy" onerror="this.style.opacity='.2'">
+        <div class="tinfo"><div class="ttl">${esc(t)}</div><div class="meta">${esc(a)}</div></div>
         ${item.duration?`<div class="dur">${esc(item.duration)}</div>`:''}
       </div>`;
     }).join('');
   }catch(e){
     if(e.name==='AbortError')return;
-    D.results.innerHTML=`<div class="empty"><div class="e-ico">⚠️</div><div class="e-ttl">Search failed</div><div class="e-sub">${esc(e.message)}</div></div>`;
+    D.results.innerHTML=`<div class="empty"><div class="ei">⚠️</div><div class="et">Search failed</div><div class="es">${esc(e.message)}</div></div>`;
   }
 }
 window.playItem=i=>{
   const item=S.results[i];if(!item)return;
-  const id=item.id||item.videoId;if(!id)return;
+  const id=item.id;if(!id)return;
   const t=item.title||'Unknown',a=(item.author||'').replace(' - Topic','');
-  const rest=S.results.slice(i+1).filter(x=>x.id||x.videoId).map(x=>({
-    id:x.id||x.videoId,title:x.title||'Unknown',author:(x.author||'').replace(' - Topic','')
-  }));
+  const rest=S.results.slice(i+1).filter(x=>x.id).map(x=>({id:x.id,title:x.title||'Unknown',author:(x.author||'').replace(' - Topic','')}));
   S.queue=S.shuffle?shuf(rest):rest;
   playTrack(id,{title:t,author:a});
 };
@@ -679,54 +679,53 @@ function renderRecent(){
 const BDGS=['🔥 Trending','⭐ Popular','✨ Fresh','📈 Viral','🎤 Featured','🎵 Hot'];
 async function loadHome(){
   updateGreet();renderRecent();
-  $('mood-r').innerHTML=MOODS.map(m=>`<div class="mc" onclick="searchMood('${esc(m.q)}','${esc(m.l)}')">
-    <div class="mc-bg" style="background:${m.c}">${m.e}</div><div class="mc-lbl">${m.l}</div>
+  // Moods — instant, no API
+  $('mood-r').innerHTML=MOODS.map(m=>`<div class="mc" onclick="searchMood('${esc(m.q)}','${esc(m.label)}')">
+    <div class="mc-img" style="background:${m.c}">${m.e}</div><div class="mc-lbl">${m.label}</div>
   </div>`).join('');
 
   $('feat-r').innerHTML='<div class="sk sk-fc"></div><div class="sk sk-fc"></div><div class="sk sk-fc"></div>';
   $('hot-r').innerHTML='<div class="sk sk-gc"></div><div class="sk sk-gc"></div><div class="sk sk-gc"></div><div class="sk sk-gc"></div>';
 
   try{
-    const r=await fetch(API.trending(S.region),{signal:AbortSignal.timeout(20000)});
-    if(!r.ok) throw new Error('Trending failed');
-    const items=await r.json();
+    const items=await api('trending',{region:S.region},15000);
     if(!items?.length) throw new Error('empty');
-
     $('feat-r').innerHTML=items.slice(0,5).map((item,i)=>{
-      const id=item.id||item.videoId;if(!id)return'';
-      return `<div class="fc" onclick="playTrack('${esc(id)}',{title:${JSON.stringify(item.title||'')},author:${JSON.stringify((item.author||'').replace(' - Topic',''))}})">
-        <img src="${thumb(id,'hqdefault')}" alt="" loading="lazy" onerror="this.style.opacity='.3'">
+      if(!item.id)return'';
+      return `<div class="fc" onclick="playTrack('${esc(item.id)}',{title:${JSON.stringify(item.title||'')},author:${JSON.stringify((item.author||'').replace(' - Topic',''))}})">
+        <img src="${thumb(item.id,'hqdefault')}" alt="" loading="lazy" onerror="this.style.opacity='.3'">
         <div class="fc-bdg">${BDGS[i%BDGS.length]}</div>
         <div class="fc-ov"><div class="fc-ttl">${esc(item.title||'')}</div><div class="fc-ath">${esc((item.author||'').replace(' - Topic',''))}</div></div>
       </div>`;
     }).join('');
-
     $('hot-r').innerHTML=items.slice(5,13).map(item=>{
-      const id=item.id||item.videoId;if(!id)return'';
-      return `<div class="gc" onclick="playTrack('${esc(id)}',{title:${JSON.stringify(item.title||'')},author:${JSON.stringify((item.author||'').replace(' - Topic',''))}})">
-        <img class="gc-img" src="${thumb(id)}" alt="" loading="lazy" onerror="this.style.opacity='.3'">
+      if(!item.id)return'';
+      return `<div class="gc" onclick="playTrack('${esc(item.id)}',{title:${JSON.stringify(item.title||'')},author:${JSON.stringify((item.author||'').replace(' - Topic',''))}})">
+        <img class="gc-img" src="${thumb(item.id)}" alt="" loading="lazy" onerror="this.style.opacity='.3'">
         <div class="gc-ttl">${esc(item.title||'')}</div>
         <div class="gc-sub">${esc((item.author||'').replace(' - Topic',''))}</div>
       </div>`;
     }).join('');
   }catch{
-    $('feat-r').innerHTML='<div style="padding:20px;color:var(--t3);font-size:14px">Couldn\'t load trending. Pull to retry.</div>';
+    $('feat-r').innerHTML='<div style="padding:20px;color:var(--t3);font-size:14px">Couldn\'t load trending</div>';
     $('hot-r').innerHTML='';
   }
 }
-window.searchMood=(q,l)=>{tab('search');D.sinp.value=l;D.sclr.classList.add('show');runSearch(q,'all')};
+window.searchMood=(q,l)=>{tab('search');D.sinput.value=l;D.sclr.classList.add('show');runSearch(q,'all')};
 
-// ═══ TOUCH / KEYBOARD ═══
+// ═══ SCROLL FIX ═══
 document.addEventListener('touchmove',e=>{
   if(e.target.closest('.scr,.frow,.grow,#pbar,#vsl'))return;
   e.preventDefault();
 },{passive:false});
 document.addEventListener('contextmenu',e=>e.preventDefault());
+
+// ═══ KEYBOARD ═══
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT')return;
   if(e.code==='Space'){e.preventDefault();togglePlay();}
-  if(e.code==='ArrowLeft')seekBy(-15);
-  if(e.code==='ArrowRight')seekBy(15);
+  if(e.code==='ArrowLeft')seek(-15);
+  if(e.code==='ArrowRight')seek(15);
   if(e.code==='Escape')closePlayer();
 });
 
@@ -736,14 +735,16 @@ if('serviceWorker'in navigator){
   setInterval(()=>navigator.serviceWorker.ready.then(r=>r.active?.postMessage('ping')).catch(()=>{}),20000);
 }
 
-// ═══ iOS hint ═══
+// ═══ iOS INSTALL HINT ═══
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!navigator.standalone)
-  setTimeout(()=>toast('📲 Tap Share → Add to Home Screen for background play',5000),4000);
+  setTimeout(()=>toast('📲 Share → Add to Home Screen for background play',5000),4000);
 
-// ═══ URL params ═══
-(()=>{const p=new URLSearchParams(location.search),id=p.get('v')||ytId(p.get('url')||'');if(id)setTimeout(()=>playTrack(id,{title:'Loading…',author:''}),600)})();
+// ═══ URL PARAMS ═══
+(()=>{const p=new URLSearchParams(location.search);const id=p.get('v')||ytId(p.get('url')||'');if(id)setTimeout(()=>playTrack(id,{title:'Loading…',author:''}),600)})();
 
+// ═══ INIT ═══
 loadHome();
+console.log('🎵 Applify ready — server-side API active');
 </script>
 </body>
 </html>
