@@ -416,7 +416,7 @@ window.closeRgn=()=>$('rgs').classList.remove('show');
 window.selRgn=code=>{closeRgn();applyRgn(code)};
 (()=>{const r=REGIONS.find(x=>x.c===S.region)||REGIONS[0];D.rgnFlag.textContent=r.f;D.rgnName.textContent=r.n})();
 
-// ── OWN API ──
+// ── OWN API (search/trending/suggestions only) ──
 async function api(path,params={},ms=12000){
   const u=new URL('/api/'+path,location.origin);
   Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,String(v)));
@@ -425,6 +425,37 @@ async function api(path,params={},ms=12000){
   const d=await r.json();
   if(d?.error)throw new Error(d.error);
   return d;
+}
+
+// ── STREAM — fetched client-side directly from Invidious (CORS-enabled) ──
+// This matches how ytify works: stream URLs from browser→Invidious, not server→Invidious
+const INV_INSTANCES=[
+  'https://inv.nadeko.net',
+  'https://invidious.privacyredirect.com',
+  'https://yt.artemislena.eu',
+  'https://iv.melmac.space',
+  'https://invidious.nerdvpn.de',
+  'https://invidious.jing.rocks',
+];
+let lastGoodInv=localStorage.getItem('ap_inv')||INV_INSTANCES[0];
+
+async function getStream(id){
+  // Try last known good instance first
+  const ordered=[lastGoodInv,...INV_INSTANCES.filter(x=>x!==lastGoodInv)];
+  for(const base of ordered){
+    try{
+      const r=await fetch(`${base}/api/v1/videos/${id}?fields=title,author,lengthSeconds,adaptiveFormats`,{signal:AbortSignal.timeout(10000)});
+      if(!r.ok)continue;
+      const d=await r.json();
+      if(!d?.adaptiveFormats?.length)continue;
+      const streams=d.adaptiveFormats.filter(f=>f.type?.startsWith('audio/')&&f.url).sort((a,b)=>parseInt(b.bitrate||0)-parseInt(a.bitrate||0));
+      if(!streams.length)continue;
+      lastGoodInv=base;localStorage.setItem('ap_inv',base);
+      const picked=streams[Math.min(1,streams.length-1)];
+      return{audioUrl:picked.url,title:d.title||'',author:(d.author||'').replace(' - Topic',''),duration:d.lengthSeconds||0};
+    }catch(e){console.warn('[stream]',base,e.message);}
+  }
+  throw new Error('Could not load audio. Try again.');
 }
 
 // ── PLAY ──
@@ -440,7 +471,7 @@ async function playTrack(id,info={}){
   if(!S.playerOpen)openPlayer();
   toast('⏳ Loading…');D.art.className='loading';
   try{
-    const data=await api('stream',{id},15000);
+    const data=await getStream(id);
     const t=data.title||title,a=(data.author||author||'').replace(' - Topic',''),dur=data.duration||0;
     S.track={title:t,author:a,duration:dur,id};
     D.mTtl.textContent=t;D.mAth.textContent=a||'—';
