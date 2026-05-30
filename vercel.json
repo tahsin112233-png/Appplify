@@ -1,13 +1,12 @@
 {
   "functions": {
     "api/*.js": {
-      "maxDuration": 60,
-      "memory": 3008
+      "maxDuration": 30
     }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(?!api).*", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -15,13 +14,6 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
         { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
-    },
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, must-revalidate" },
-        { "key": "Content-Type", "value": "application/json" }
       ]
     }
   ]
