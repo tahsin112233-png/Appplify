@@ -1,8 +1,11 @@
 {
   "name": "applify",
   "version": "1.0.0",
-  "private": true,
+  "type": "module",
+  "dependencies": {
+    "youtubei.js": "^17.0.1"
+  },
   "engines": {
-    "node": "20.x"
+    "node": "26.x"
   }
 }
