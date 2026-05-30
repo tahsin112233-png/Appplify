@@ -10,30 +10,57 @@ const INSTANCES = [
   'https://invidious.jing.rocks',
 ];
 
-async function invidiousFetch(path, timeoutMs = 8000) {
+async function invidiousFetch(path, timeoutMs = 15000) {
+  const errors = [];
   for (const base of INSTANCES) {
     try {
       const url = `${base}${path}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+        signal: controller.signal,
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.invidious.io/'
+        },
       });
-      if (!res.ok) continue;
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        errors.push(`${base}: HTTP ${res.status}`);
+        continue;
+      }
+      
       const data = await res.json();
       if (data && !data.error) return data;
-    } catch {}
+      errors.push(`${base}: Invalid response`);
+    } catch (e) {
+      errors.push(`${base}: ${e.message}`);
+    }
   }
-  throw new Error('All Invidious instances failed');
+  const errorMsg = errors.length ? errors.join('; ') : 'All Invidious instances failed';
+  throw new Error(errorMsg);
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') { res.status(204).end(); return; }
+  res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+  
+  if (req.method === 'OPTIONS') { 
+    res.status(204).end(); 
+    return; 
+  }
 
   const q = (req.query.q || '').trim();
-  if (!q) { res.status(400).json({ error: 'Missing q' }); return; }
+  if (!q) { 
+    res.status(400).json({ error: 'Missing q parameter' }); 
+    return; 
+  }
 
   try {
     const params = new URLSearchParams({
@@ -56,14 +83,23 @@ export default async function handler(req, res) {
       }))
       .slice(0, 20);
 
+    if (items.length === 0) {
+      res.status(200).json({ error: 'No results found', items: [] });
+      return;
+    }
+
     res.status(200).json(items);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Search error:', err.message);
+    res.status(503).json({ 
+      error: 'Search service temporarily unavailable',
+      details: err.message 
+    });
   }
 }
 
 function formatDuration(secs) {
-  if (!secs) return '';
+  if (!secs || isNaN(secs)) return '';
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = String(secs % 60).padStart(2, '0');
