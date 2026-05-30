@@ -1,11 +1,11 @@
-import { Innertube, UniversalCache } from 'youtubei.js';
+// Server-side search suggestions via Invidious
 
-async function getYT() {
-  return Innertube.create({
-    cache: new UniversalCache(false),
-    generate_session_locally: true,
-  });
-}
+const INSTANCES = [
+  'https://inv.nadeko.net',
+  'https://yt.artemislena.eu',
+  'https://invidious.privacyredirect.com',
+  'https://iv.melmac.space',
+];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,17 +14,23 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
 
   const q = (req.query.q || '').trim();
-  if (!q) { res.status(400).json({ error: 'Missing q' }); return; }
+  if (!q) { return res.status(200).json([]); }
 
-  try {
-    const yt = await getYT();
-    const suggestions = await yt.getSearchSuggestions(q);
-    // v17 returns string[] or SearchSuggestion[]
-    const result = Array.isArray(suggestions)
-      ? suggestions.map(s => typeof s === 'string' ? s : s?.suggestion?.toString?.() || s?.toString?.() || '').filter(Boolean)
-      : [];
-    return res.status(200).json(result.slice(0, 8));
-  } catch (err) {
-    return res.status(200).json([]); // suggestions failing silently is fine
+  for (const base of INSTANCES) {
+    try {
+      const url = `${base}/api/v1/search/suggestions?q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(4000),
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      });
+      if (!r.ok) continue;
+      const data = await r.json();
+      const suggestions = data?.suggestions || [];
+      if (suggestions.length) {
+        return res.status(200).json(suggestions.slice(0, 8));
+      }
+    } catch {}
   }
+
+  return res.status(200).json([]); // fail silently — suggestions are optional
 }
