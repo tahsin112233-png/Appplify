@@ -6,6 +6,6 @@
     "youtubei.js": "^17.0.1"
   },
   "engines": {
-    "node": "26.x"
+    "node": "24.x"
   }
 }
