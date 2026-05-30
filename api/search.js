@@ -1,47 +1,29 @@
-import { Innertube, UniversalCache } from 'youtubei.js';
+// Server-side proxy to Invidious search API
+// Bypasses CORS (server→server) and YouTube datacenter blocking
 
-async function getYT() {
-  return Innertube.create({
-    cache: new UniversalCache(false),
-    generate_session_locally: true,
-  });
-}
+const INSTANCES = [
+  'https://inv.nadeko.net',
+  'https://yt.artemislena.eu',
+  'https://invidious.privacyredirect.com',
+  'https://yt.drgnz.club',
+  'https://iv.melmac.space',
+  'https://invidious.jing.rocks',
+];
 
-function extractVideo(node) {
-  try {
-    const raw = node?.as ? node.as() : node;
-    const id = raw?.id || raw?.video_id || raw?.videoId;
-    if (!id || typeof id !== 'string' || id.length !== 11) return null;
-    const title = raw?.title?.text || raw?.title?.toString?.() || '';
-    if (!title) return null;
-    const author = (
-      raw?.author?.name || raw?.author?.toString?.() ||
-      raw?.short_byline_text?.toString?.() || ''
-    ).replace(' - Topic', '').trim();
-    const duration = raw?.duration?.text || raw?.duration?.toString?.() || '';
-    const secs = raw?.duration?.seconds || 0;
-    if (secs > 0 && secs < 60) return null; // skip shorts
-    return { id, title, author, duration, type: 'video' };
-  } catch { return null; }
-}
-
-function extractFromResults(results) {
-  const items = [];
-  const seen = new Set();
-  const arr = results?.results || results?.videos || results?.items || [];
-  for (const node of arr) {
+async function invidiousFetch(path, timeoutMs = 8000) {
+  for (const base of INSTANCES) {
     try {
-      // Direct video node
-      const v = extractVideo(node);
-      if (v && !seen.has(v.id)) { seen.add(v.id); items.push(v); continue; }
-      // Wrapped in content
-      if (node?.content) {
-        const v2 = extractVideo(node.content);
-        if (v2 && !seen.has(v2.id)) { seen.add(v2.id); items.push(v2); }
-      }
+      const url = `${base}${path}`;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data && !data.error) return data;
     } catch {}
   }
-  return items;
+  throw new Error('All Invidious instances failed');
 }
 
 export default async function handler(req, res) {
@@ -51,45 +33,39 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
 
   const q = (req.query.q || '').trim();
-  const filter = req.query.filter || req.query.f || 'all';
   if (!q) { res.status(400).json({ error: 'Missing q' }); return; }
 
   try {
-    const yt = await getYT();
-    let items = [];
+    const params = new URLSearchParams({
+      q,
+      type: 'video',
+      sort_by: 'relevance',
+      fields: 'videoId,title,author,authorId,lengthSeconds',
+    });
+    
+    const results = await invidiousFetch(`/api/v1/search?${params}`);
+    
+    const items = (Array.isArray(results) ? results : [])
+      .filter(v => v.videoId && v.lengthSeconds > 60) // skip shorts
+      .map(v => ({
+        id: v.videoId,
+        title: v.title || 'Unknown',
+        author: (v.author || 'Unknown').replace(' - Topic', ''),
+        duration: formatDuration(v.lengthSeconds),
+        type: 'video',
+      }))
+      .slice(0, 20);
 
-    // Music search for song/artist/album filters
-    if (filter === 'song' || filter === 'artist' || filter === 'album') {
-      try {
-        const r = await yt.music.search(q, { type: filter === 'song' ? 'song' : filter === 'artist' ? 'artist' : 'album' });
-        const shelf = r?.songs || r?.artists || r?.albums || r;
-        const contents = shelf?.contents || shelf?.results || [];
-        for (const node of contents) {
-          try {
-            const raw = node?.as ? node.as() : node;
-            const id = raw?.id || raw?.video_id;
-            if (!id || id.length !== 11) continue;
-            const title = raw?.title?.toString?.() || raw?.name?.toString?.() || '';
-            if (!title) continue;
-            const author = (raw?.artists?.[0]?.name || raw?.author?.name || '').replace(' - Topic', '');
-            const duration = raw?.duration?.text || '';
-            items.push({ id, title, author, duration, type: 'song' });
-          } catch {}
-        }
-      } catch (e) {
-        console.warn('[search] music search failed, falling back:', e.message);
-      }
-    }
-
-    // Standard YouTube search (default + fallback)
-    if (items.length === 0) {
-      const r = await yt.search(q, { type: 'video', sort_by: 'relevance' });
-      items = extractFromResults(r);
-    }
-
-    return res.status(200).json(items.slice(0, 20));
+    res.status(200).json(items);
   } catch (err) {
-    console.error('[search]', err.message);
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
+}
+
+function formatDuration(secs) {
+  if (!secs) return '';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = String(secs % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2,'0')}:${s}` : `${m}:${s}`;
 }
