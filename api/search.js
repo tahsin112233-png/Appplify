@@ -1,4 +1,3 @@
-// Search via Invidious API - server side proxy (no CORS issues, no YouTube blocking)
 const INSTANCES = [
   'https://inv.nadeko.net',
   'https://invidious.privacyredirect.com',
@@ -23,22 +22,44 @@ export default async function handler(req, res) {
   const errors = [];
   for (const base of INSTANCES) {
     try {
-      const url = `${base}/api/v1/search?${new URLSearchParams({ q, type: 'video', sort_by: 'relevance' })}`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(7000), headers: { 'User-Agent': 'Mozilla/5.0' } });
+      // Build URL string directly — avoids any internal url.parse() issues
+      const encoded = encodeURIComponent(q);
+      const url = `${base}/api/v1/search?q=${encoded}&type=video&sort_by=relevance`;
+      
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(8000),
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      });
+
       if (!r.ok) { errors.push(`${base}: HTTP ${r.status}`); continue; }
+      
       const data = await r.json();
-      if (!Array.isArray(data)) { errors.push(`${base}: not array`); continue; }
-      
+      if (!Array.isArray(data) || !data.length) { errors.push(`${base}: empty`); continue; }
+
       const items = data
-        .filter(v => v.videoId && (v.lengthSeconds || 0) > 60)
-        .map(v => ({ id: v.videoId, title: v.title || '', author: (v.author || '').replace(' - Topic',''), duration: fmtDur(v.lengthSeconds), type: 'video' }))
+        .filter(v => {
+          if (!v.videoId) return false;
+          // Only skip if we KNOW it's a short (lengthSeconds present AND under 60s)
+          if (v.lengthSeconds && v.lengthSeconds < 60) return false;
+          return true;
+        })
+        .map(v => ({
+          id: v.videoId,
+          title: v.title || 'Unknown',
+          author: (v.author || '').replace(' - Topic', ''),
+          duration: fmtDur(v.lengthSeconds),
+          type: 'video',
+        }))
         .slice(0, 20);
-      
-      if (!items.length) { errors.push(`${base}: 0 results`); continue; }
+
+      if (!items.length) { errors.push(`${base}: filtered to 0`); continue; }
+
       return res.status(200).json(items);
-    } catch (e) { errors.push(`${base}: ${e.message}`); }
+    } catch (e) {
+      errors.push(`${base}: ${e.message}`);
+    }
   }
-  
-  console.error('[search] all failed:', errors);
-  return res.status(500).json({ error: 'All search sources failed', details: errors });
+
+  console.error('[search] all instances failed:', JSON.stringify(errors));
+  return res.status(500).json({ error: 'Search unavailable', details: errors });
 }
