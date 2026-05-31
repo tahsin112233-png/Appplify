@@ -626,7 +626,7 @@ function renderRecent(){
   const sec=$('rec-sec'),lst=$('rec-list');
   if(!h.length){sec.style.display='none';return;}
   sec.style.display='block';
-  lst.innerHTML=h.slice(0,8).map(i=>`<div class="ri" onclick="playTrack('${esc(i.id)}',{title:${JSON.stringify(i.title)},author:${JSON.stringify(i.author)}})" ><img src="${thumb(i.id)}" alt="" loading="lazy"><div class="ri-inf"><div class="ri-ttl">${esc(i.title)}</div><div class="ri-sub">${esc(i.author)}</div></div><button class="ri-pb"><svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>`).join('');
+  lst.innerHTML=h.slice(0,8).map(i=>`<div class="ri" data-id="${esc(i.id)}" data-title="${esc(i.title||'')}" data-author="${esc(i.author||'')}"><img src="${thumb(i.id)}" alt="" loading="lazy"><div class="ri-inf"><div class="ri-ttl">${esc(i.title)}</div><div class="ri-sub">${esc(i.author)}</div></div><button class="ri-pb"><svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button></div>`).join('');
 }
 async function loadHome(){
   updateGreet();renderRecent();
@@ -636,11 +636,21 @@ async function loadHome(){
   try{
     const items=await api('trending',{region:S.region},15000);
     if(!items?.length)throw new Error('empty');
-    $('feat-row').innerHTML=items.slice(0,5).map((it,i)=>{if(!it.id)return'';return`<div class="fc" onclick="playTrack('${esc(it.id)}',{title:${JSON.stringify(it.title||'')},author:${JSON.stringify((it.author||'').replace(' - Topic',''))}})" ><img src="${thumb(it.id,'hqdefault')}" alt="" loading="lazy" onerror="this.style.opacity='.3'"><div class="fc-bdg">${BDGS[i%BDGS.length]}</div><div class="fc-ov"><div class="fc-ttl">${esc(it.title||'')}</div><div class="fc-ath">${esc((it.author||'').replace(' - Topic',''))}</div></div></div>`;}).join('');
-    $('hot-row').innerHTML=items.slice(5,13).map(it=>{if(!it.id)return'';return`<div class="gc" onclick="playTrack('${esc(it.id)}',{title:${JSON.stringify(it.title||'')},author:${JSON.stringify((it.author||'').replace(' - Topic',''))}})" ><img src="${thumb(it.id)}" alt="" loading="lazy" onerror="this.style.opacity='.3'"><div class="gc-ttl">${esc(it.title||'')}</div><div class="gc-sub">${esc((it.author||'').replace(' - Topic',''))}</div></div>`;}).join('');
+    $('feat-row').innerHTML=items.slice(0,5).map((it,i)=>{if(!it.id)return'';const a=(it.author||'').replace(' - Topic','');return`<div class="fc" data-id="${esc(it.id)}" data-title="${esc(it.title||'')}" data-author="${esc(a)}"><img src="${thumb(it.id,'hqdefault')}" alt="" loading="lazy" onerror="this.style.opacity='.3'"><div class="fc-bdg">${BDGS[i%BDGS.length]}</div><div class="fc-ov"><div class="fc-ttl">${esc(it.title||'')}</div><div class="fc-ath">${esc(a)}</div></div></div>`;}).join('');
+    $('hot-row').innerHTML=items.slice(5,13).map(it=>{if(!it.id)return'';const a=(it.author||'').replace(' - Topic','');return`<div class="gc" data-id="${esc(it.id)}" data-title="${esc(it.title||'')}" data-author="${esc(a)}"><img class="gc-img" src="${thumb(it.id)}" alt="" loading="lazy" onerror="this.style.opacity='.3'"><div class="gc-ttl">${esc(it.title||'')}</div><div class="gc-sub">${esc(a)}</div></div>`;}).join('');
   }catch{$('feat-row').innerHTML='<div style="padding:20px;color:var(--t3);font-size:14px">Couldn\'t load trending</div>';$('hot-row').innerHTML='';}
 }
 window.searchMood=(q,l)=>{goTab('search');D.sinput.value=l;D.sclr.classList.add('show');runSearch(q,'all')};
+
+// ── EVENT DELEGATION for home cards (data-id approach avoids quote escaping issues) ──
+document.addEventListener('click', e => {
+  const card = e.target.closest('[data-id]');
+  if (!card) return;
+  const id = card.dataset.id;
+  const title = card.dataset.title || '';
+  const author = card.dataset.author || '';
+  if (id) playTrack(id, {title, author});
+});
 
 // ── SCROLL / KEYBOARD ──
 document.addEventListener('touchmove',e=>{if(!e.target.closest('.scr,.frow,.grow,#pbar,#vsl'))e.preventDefault()},{passive:false});
