@@ -429,33 +429,50 @@ async function api(path,params={},ms=12000){
 
 // ── STREAM — fetched client-side directly from Invidious (CORS-enabled) ──
 // This matches how ytify works: stream URLs from browser→Invidious, not server→Invidious
+// Invidious instances with CORS enabled — browser calls these directly
 const INV_INSTANCES=[
   'https://inv.nadeko.net',
-  'https://invidious.privacyredirect.com',
   'https://yt.artemislena.eu',
   'https://iv.melmac.space',
   'https://invidious.nerdvpn.de',
   'https://invidious.jing.rocks',
+  'https://invidious.privacyredirect.com',
+  'https://yt.drgnz.club',
+  'https://invidious.fdn.fr',
 ];
 let lastGoodInv=localStorage.getItem('ap_inv')||INV_INSTANCES[0];
 
 async function getStream(id){
-  // Try last known good instance first
   const ordered=[lastGoodInv,...INV_INSTANCES.filter(x=>x!==lastGoodInv)];
+  let lastErr='Unknown error';
   for(const base of ordered){
     try{
-      const r=await fetch(`${base}/api/v1/videos/${id}?fields=title,author,lengthSeconds,adaptiveFormats`,{signal:AbortSignal.timeout(10000)});
-      if(!r.ok)continue;
+      const r=await fetch(`${base}/api/v1/videos/${id}?fields=title,author,lengthSeconds,adaptiveFormats`,{
+        signal:AbortSignal.timeout(12000),
+        headers:{'Accept':'application/json'},
+      });
+      if(!r.ok){lastErr=`${base} HTTP ${r.status}`;continue;}
       const d=await r.json();
-      if(!d?.adaptiveFormats?.length)continue;
-      const streams=d.adaptiveFormats.filter(f=>f.type?.startsWith('audio/')&&f.url).sort((a,b)=>parseInt(b.bitrate||0)-parseInt(a.bitrate||0));
-      if(!streams.length)continue;
-      lastGoodInv=base;localStorage.setItem('ap_inv',base);
+      if(!d?.adaptiveFormats?.length){lastErr=`${base} no formats`;continue;}
+      const streams=d.adaptiveFormats
+        .filter(f=>f.type?.startsWith('audio/')&&f.url)
+        .sort((a,b)=>parseInt(b.bitrate||0)-parseInt(a.bitrate||0));
+      if(!streams.length){lastErr=`${base} no audio`;continue;}
+      lastGoodInv=base;
+      localStorage.setItem('ap_inv',base);
       const picked=streams[Math.min(1,streams.length-1)];
-      return{audioUrl:picked.url,title:d.title||'',author:(d.author||'').replace(' - Topic',''),duration:d.lengthSeconds||0};
-    }catch(e){console.warn('[stream]',base,e.message);}
+      return{
+        audioUrl:picked.url,
+        title:d.title||'',
+        author:(d.author||'').replace(' - Topic',''),
+        duration:d.lengthSeconds||0,
+      };
+    }catch(e){
+      lastErr=`${base}: ${e.message}`;
+      console.warn('[stream]',lastErr);
+    }
   }
-  throw new Error('Could not load audio. Try again.');
+  throw new Error('Audio unavailable. Try again or try a different song.');
 }
 
 // ── PLAY ──
@@ -486,6 +503,7 @@ async function playTrack(id,info={}){
   }catch(e){toast('⚠ '+e.message,4000);D.art.className='';updateIcons();}
 }
 
+window.playTrack=playTrack;
 function setArt(id){
   const u=thumb(id,'hqdefault');
   D.art.src=u;D.mArt.src=u;D.pbgi.style.backgroundImage=`url(${u})`;
